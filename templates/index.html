@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Manager - Web</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- DataTables Bootstrap 5 -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <style>
+        /* No index.html */
+        .table-responsive {
+            display: block;
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .table {
+            min-width: 100%;
+            table-layout: auto;
+            white-space: nowrap;
+        }
+        .table th, .table td {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+    <style>
+        .asset-card {
+            transition: all 0.3s;
+        }
+        .asset-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+        .summary-card {
+            border-left: 4px solid #0d6efd;
+        }
+        .graph-container {
+            height: 500px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            padding: 15px;
+        }
+        .config-badge {
+            cursor: pointer;
+        }
+        .pagination-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        input.weight-input {
+            width: 120px;
+        }
+        input.factor-input {
+            width: 100px;
+        }        
+    </style>
+</head>
+<body>
+    <div id="status-alert-container" class="position-fixed top-0 start-50 translate-middle-x mt-3" style="z-index: 2000; width: auto; max-width: 90%;"></div>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-graph-up"></i> Portfolio Manager
+            </a>
+            <div class="d-flex">
+                <button class="btn btn-outline-light me-2" onclick="toggleFontSize('increase')">
+                    <i class="bi bi-zoom-in"></i> A+
+                </button>
+                <button class="btn btn-outline-light" onclick="toggleFontSize('decrease')">
+                    <i class="bi bi-zoom-out"></i> A-
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="row">
+            <!-- Painel de Controle -->
+            <div class="col-lg-3">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <i class="bi bi-sliders"></i> Configurações
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Nome da Configuração</label>
+                            <input type="text" class="form-control" id="config-name" value="meu_portfolio">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Carregar Configuração</label>
+                            <select class="form-select" id="config-selector"></select>
+                        </div>
+                        <div class="border p-3 mb-3 rounded">
+                            <h5><i class="bi bi-gear"></i> Parâmetros Gerais</h5>
+                            <div class="mb-3">
+                                <label class="form-label">Capital Inicial</label>
+                                <input type="number" class="form-control" id="initial-capital" value="100000">
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label">Data Início (YYYY-MM)</label>
+                                    <input type="text" class="form-control" id="start-year-month" value="2010-01">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label">Data Final (YYYY-MM)</label>
+                                    <input type="text" class="form-control" id="end-year-month" value="">
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label">Frequência Rebalanceamento</label>
+                                    <select class="form-select" id="rebalance-freq">
+                                        <option value="N">Sem</option>
+                                        <option value="M" selected>Mensal</option>
+                                        <option value="B">Bimestral</option>
+                                        <option value="Q">Trimestral</option>
+                                        <option value="D">Quadrimestral</option>
+                                        <option value="S">Semestral</option>
+                                        <option value="A">Anual</option>
+                                    </select>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label">Moeda de Saída</label>
+                                    <select class="form-select" id="output-currency">
+                                        <option value="BRL" selected>BRL</option>
+                                        <option value="USD">USD</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-success" onclick="saveConfig()">
+                                <i class="bi bi-save"></i> Salvar Configuração
+                            </button>
+                            <button class="btn btn-primary" onclick="runSimulation()">
+                                <i class="bi bi-play-circle"></i> Executar Simulação
+                            </button>
+                            <button class="btn btn-warning" onclick="clearConfig()">
+                                <i class="bi bi-eraser"></i> Limpar Tela
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <i class="bi bi-pie-chart"></i> Resumo da Alocação
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Soma dos pesos:</span>
+                                <strong id="total-weight">0.00000000%</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Restante:</span>
+                                <strong id="remaining-weight" class="text-success">100.00000000%</strong>
+                            </div>
+                        </div>
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div id="allocation-progress" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <div class="d-grid">
+                            <button class="btn btn-outline-secondary" onclick="resetWeights()">
+                                <i class="bi bi-arrow-repeat"></i> Distribuir Igualmente
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Ativos -->
+            <div class="col-lg-9">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-list"></i> Ativos Disponíveis</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="show-selected-only">
+                            <label class="form-check-label" for="show-selected-only">Mostrar apenas selecionados</label>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Ativo</th>
+                                        <th>Arquivo</th>
+                                        <th>Histórico</th>
+                                        <th>Tipo</th>
+                                        <th>Moeda</th>
+                                        <th>Incluir</th>
+                                        <th>Peso (%)</th>
+                                        <th>Fator Perf.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="assets-table">
+                                    <!-- Preenchido por JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resultados da Simulação -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <i class="bi bi-bar-chart"></i> Resultados
+                    </div>
+                    <div class="card-body">
+                        <div id="simulation-results">
+                            <div class="alert alert-info">
+                                Execute uma simulação para ver os resultados
+                            </div>
+                        </div>
+                        <div id="progress-container" class="d-none">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Progresso da simulação:</span>
+                                <span id="progress-text">0%</span>
+                            </div>
+                            <div class="progress">
+                                <div id="simulation-progress" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button id="show-graphs-btn" class="btn btn-info mt-3" disabled onclick="showGraphs()">
+                                <i class="bi bi-bar-chart"></i> Mostrar Gráficos
+                            </button>
+                            <button id="show-details-btn" class="btn btn-secondary mt-3" disabled onclick="showDetails()">
+                                <i class="bi bi-table"></i> Mostrar Detalhamento
+                            </button>                        
+                        </div>                    
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Resultados -->
+    <div class="modal fade" id="results-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 95vw;">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Resultados da Simulação</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="results-content"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-primary" onclick="downloadResults()">
+                        <i class="bi bi-download"></i> Baixar Resultados
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Variáveis globais
+        let assetsData = {};
+        let currentConfig = {};
+        let fontSize = 14;
+        let currentSimulationConfigName = null;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadAssets();
+            await loadDefaultConfig(); // Carrega a configuração padrão
+            loadConfigSelector();
+        });
+
+        // Carregar ativos
+        async function loadAssets() {
+            const response = await fetch('/get_assets');
+            assetsData = await response.json();
+            renderAssetsTable();
+        }
+
+        // Carregar lista de configurações
+        async function loadConfigSelector(selectedConfig = null) {
+            const response = await fetch('/get_configs');
+            const configs = await response.json();
+            
+            const selector = document.getElementById('config-selector');
+            selector.innerHTML = '';
+            
+            configs.forEach(config => {
+                const option = document.createElement('option');
+                option.value = config;
+                option.textContent = config;
+                selector.appendChild(option);
+            });
+
+            // Se houver config selecionada, define como atual
+            if (selectedConfig && configs.includes(selectedConfig)) {
+                selector.value = selectedConfig;
+            }
+
+            // Evita múltiplos listeners duplicados
+            selector.onchange = () => loadSelectedConfig();
+        }
+
+        // Renderizar tabela de ativos
+        function renderAssetsTable(showOnlySelected = false) {
+
+            document.getElementById('show-selected-only').checked = showOnlySelected;
+            const table = document.getElementById('assets-table');
+            table.innerHTML = '';
+            
+            let totalWeight = 0;
+            
+            for (const [asset, data] of Object.entries(assetsData)) {
+                if (showOnlySelected && !data.selected) continue;
+                
+                const row = document.createElement('tr');
+                
+                // Formatar dados históricos
+                const history = `${data.start} a ${data.end}`;
+                
+                row.innerHTML = `
+                    <td>${data.nome_amigavel}</td>
+                    <td>${data.arquivo}</td>
+                    <td>${history}</td>
+                    <td>${data.tipo}</td>
+                    <td>${data.moeda}</td>
+                    <td>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input asset-check" type="checkbox" 
+                                data-asset="${asset}" ${data.selected ? 'checked' : ''}>
+                        </div>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control weight-input" 
+                            data-asset="${asset}" value="${data.weight}" step="0.0001" min="0">
+                    </td>
+                    <td>
+                        <input type="number" class="form-control factor-input" 
+                            data-asset="${asset}" value="${data.factor}" step="0.01" min="0.1" max="10">
+                    </td>
+                `;
+                
+                table.appendChild(row);
+                
+                // Atualizar peso total
+                if (data.selected) {
+                    totalWeight += parseFloat(data.weight) || 0;
+                }
+            }
+            
+            // Atualizar resumo
+            updateAllocationSummary(totalWeight);
+            
+            // Adicionar event listeners
+            document.querySelectorAll('.asset-check').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const asset = this.dataset.asset;
+                    assetsData[asset].selected = this.checked;
+                    updateTotalWeight();
+                });
+            });
+            
+            document.querySelectorAll('.weight-input').forEach(input => {
+                input.addEventListener('input', function() {
+                    const asset = this.dataset.asset;
+                    assetsData[asset].weight = this.value;
+                    updateTotalWeight();
+                });
+            });
+            
+            document.querySelectorAll('.factor-input').forEach(input => {
+                input.addEventListener('input', function() {
+                    const asset = this.dataset.asset;
+                    assetsData[asset].factor = this.value;
+                });
+            });
+        }
+
+        // Atualizar peso total
+        function updateTotalWeight() {
+            let totalWeight = 0;
+            
+            for (const asset in assetsData) {
+                if (assetsData[asset].selected) {
+                    totalWeight += parseFloat(assetsData[asset].weight) || 0;
+                }
+            }
+            
+            updateAllocationSummary(totalWeight);
+        }
+
+        // Atualizar resumo de alocação
+        function updateAllocationSummary(totalWeight) {
+            document.getElementById('total-weight').textContent = `${totalWeight.toFixed(8)}%`;
+            
+            const remaining = 100 - totalWeight;
+            document.getElementById('remaining-weight').textContent = `${remaining.toFixed(8)}%`;
+            
+            // Atualizar barra de progresso
+            const progressBar = document.getElementById('allocation-progress');
+            progressBar.style.width = `${totalWeight}%`;
+            
+            // Atualizar cor conforme o valor
+            if (remaining < 0) {
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('bg-danger');
+                document.getElementById('remaining-weight').classList.remove('text-success');
+                document.getElementById('remaining-weight').classList.add('text-danger');
+            } else if (remaining === 0) {
+                progressBar.classList.remove('bg-danger');
+                progressBar.classList.add('bg-success');
+                document.getElementById('remaining-weight').classList.remove('text-danger');
+                document.getElementById('remaining-weight').classList.add('text-success');
+            } else {
+                progressBar.classList.remove('bg-danger');
+                progressBar.classList.add('bg-primary');
+                document.getElementById('remaining-weight').classList.remove('text-danger');
+                document.getElementById('remaining-weight').classList.add('text-success');
+            }
+        }
+
+        // Distribuir pesos igualmente
+        function resetWeights() {
+            let selectedAssets = [];
+            
+            for (const asset in assetsData) {
+                if (assetsData[asset].selected) {
+                    selectedAssets.push(asset);
+                }
+            }
+            
+            if (selectedAssets.length === 0) return;
+            
+            const weightPerAsset = (100 / selectedAssets.length).toFixed(8);
+            
+            selectedAssets.forEach(asset => {
+                assetsData[asset].weight = weightPerAsset;
+            });
+            
+            renderAssetsTable(document.getElementById('show-selected-only').checked);
+        }
+
+        // Alternar entre mostrar apenas selecionados
+        document.getElementById('show-selected-only').addEventListener('change', function() {
+            renderAssetsTable(this.checked);
+        });
+
+        // Salvar configuração
+        async function saveConfig() {
+            const configName = document.getElementById('config-name').value;
+
+            const params = {
+                initial_capital: document.getElementById('initial-capital').value,
+                start_year_month: document.getElementById('start-year-month').value,
+                end_year_month: document.getElementById('end-year-month').value,
+                rebalance_freq: document.getElementById('rebalance-freq').value,
+                output_currency: document.getElementById('output-currency').value
+            };
+
+            const allocation = {};
+            const factors = {};
+
+            for (const asset in assetsData) {
+                if (assetsData[asset].selected) {
+                    allocation[asset] = (parseFloat(assetsData[asset].weight) / 100).toFixed(10);
+                    factors[asset] = assetsData[asset].factor;
+                }
+            }
+
+            const response = await fetch('/save_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    config_name: configName,
+                    params: params,
+                    allocation: allocation,
+                    factors: factors
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showStatusAlert('Configuração salva com sucesso!', 'success');
+                await loadConfigSelector(configName + '.ini');  // ✅ restaura a seleção correta
+            } else {
+                showStatusAlert(`Erro ao salvar: ${result.error}`, 'danger');
+            }
+        }
+
+        // Função para carregar configuração selecionada (CORRIGIDA)
+        async function loadSelectedConfig() {
+            const selector = document.getElementById('config-selector');
+            const configName = selector.value;
+            
+            // Obter estado do checkbox ANTES de carregar a configuração
+            const showOnlySelected = document.getElementById('show-selected-only').checked;
+            
+            const response = await fetch('/load_config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ config_name: configName })
+            });
+            
+            const configData = await response.json();
+            
+            if (!configData) {
+                alert('Erro ao carregar configuração');
+                return;
+            }            
+            // Aplicar parâmetros
+            document.getElementById('config-name').value = configName.replace('.ini', '');
+            document.getElementById('initial-capital').value = configData.initial_capital;
+            document.getElementById('start-year-month').value = configData.start_year_month;
+            document.getElementById('end-year-month').value = configData.end_year_month || '';
+            
+            // CORREÇÃO: Converter valor numérico para código de frequência
+            const freqMap = {
+                0: 'N',  // Sem rebalanceamento
+                1: 'M',  // Mensal
+                2: 'B',  // Bimestral
+                3: 'Q',  // Trimestral
+                4: 'D',  // Quadrimestral
+                6: 'S',  // Semestral
+                12: 'A'  // Anual
+            };
+            
+            const freqValue = configData.rebalance_freq;
+            document.getElementById('rebalance-freq').value = freqMap[freqValue] || 'M';
+            
+            document.getElementById('output-currency').value = configData.output_currency;
+            
+            // Aplicar alocação
+            for (const asset in assetsData) {
+                assetsData[asset].selected = false;
+                assetsData[asset].weight = '0';
+                assetsData[asset].factor = '1.0';
+            }
+            
+            for (const [asset, weight] of Object.entries(configData.allocation)) {
+                if (assetsData[asset]) {
+                    assetsData[asset].selected = true;
+                    assetsData[asset].weight = (parseFloat(weight) * 100).toFixed(8);
+                }
+            }
+            
+            // Aplicar fatores de performance
+            if ('performance_factors' in configData) {
+                for (const [asset, factor] of Object.entries(configData.performance_factors)) {
+                    if (assetsData[asset]) {
+                        assetsData[asset].factor = factor;
+                    }
+                }
+            }
+            
+            // Atualizar tabela
+            //const showOnlySelected = document.getElementById('show-selected-only').checked;
+            renderAssetsTable(showOnlySelected); 
+            
+            showStatusAlert('Configuração carregada com sucesso!', 'success');
+        }
+        let currentExecutionId = null; // variável global
+
+        async function runSimulation() {
+            // Desabilitar ambos os botões no início
+            document.getElementById('show-graphs-btn').disabled = true;
+            document.getElementById('show-details-btn').disabled = true;            
+            const configName = document.getElementById('config-name').value;
+
+            // Desabilitar botão de gráficos
+            document.getElementById('show-graphs-btn').disabled = true;
+
+            // Mostrar barra de progresso
+            document.getElementById('progress-container').classList.remove('d-none');
+            showStatusAlert('Simulação em andamento...', 'info');
+
+            try {
+                // Salvar configuração antes de simular
+                await saveConfig();
+
+                // Iniciar simulação
+                const response = await fetch('/run_simulation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config_name: configName })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'started') {
+                    const executionId = result.execution_id;
+                    currentExecutionId = executionId;
+
+                    // Verificar resultados periodicamente
+                    const intervalId = setInterval(async () => {
+                        try {
+                            const tableResponse = await fetch('/get_results_table', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ execution_id: executionId })
+                            });
+
+                            const tableResult = await tableResponse.json();
+
+                            if (tableResult.success) {
+                                clearInterval(intervalId);
+
+                                // Habilitar ambos os botões
+                                // Habilitar ambos os botões e armazenar ID
+                                document.getElementById('show-graphs-btn').disabled = false;
+                                document.getElementById('show-details-btn').disabled = false;
+                                document.getElementById('show-graphs-btn').dataset.executionId = executionId;
+                                document.getElementById('show-details-btn').dataset.executionId = executionId; // Garant
+
+                                // Exibir resultados no modal
+                                document.getElementById('results-content').innerHTML = tableResult.html_table;
+                                const modal = new bootstrap.Modal(document.getElementById('results-modal'));
+                                modal.show();
+
+                                // Inicializar DataTable após renderização
+                                setTimeout(() => {
+                                    $('#datatable').DataTable({
+                                        pageLength: 25,
+                                        lengthMenu: [10, 15, 25, 50, 100],
+                                        language: {
+                                            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json'
+                                        }
+                                    });
+                                }, 300);
+
+                                // Habilitar botão de gráficos
+                                document.getElementById('show-graphs-btn').disabled = false;
+                                document.getElementById('show-graphs-btn').dataset.executionId = executionId;
+
+                                // Esconder progresso
+                                document.getElementById('progress-container').classList.add('d-none');
+                            } else if (tableResult.error && !tableResult.error.includes("andamento")) {
+                                clearInterval(intervalId);
+                                document.getElementById('simulation-results').innerHTML = `
+                                    <div class="alert alert-danger">
+                                        <i class="bi bi-exclamation-circle"></i> ${tableResult.error}
+                                    </div>
+                                `;
+                                document.getElementById('progress-container').classList.add('d-none');
+                            }
+                            // Se estiver em andamento, continua esperando...
+                        } catch (error) {
+                            clearInterval(intervalId);
+                            showStatusAlert('Erro ao verificar resultados', 'danger');                            
+                            document.getElementById('progress-container').classList.add('d-none');
+                        }
+                    }, 2000);
+                }
+            } catch (error) {
+                showStatusAlert('Erro: ' + error.message, 'danger');
+                document.getElementById('progress-container').classList.add('d-none');
+            }
+        }
+        // Mostrar gráficos
+        async function showGraphs() {
+            // Recuperar execution_id do botão
+            const executionId = document.getElementById('show-graphs-btn').dataset.executionId;
+            
+            if (!executionId) {
+                alert('Nenhuma simulação disponível. Execute uma simulação primeiro.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/show_graphs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ execution_id: executionId })
+                });
+                
+                if (response.ok) {
+                    const htmlContent = await response.text();
+                    
+                    // Abrir nova aba com os gráficos
+                    const newWindow = window.open('', '_blank');
+                    newWindow.document.write(htmlContent);
+                    newWindow.document.close();
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error);
+                }
+            } catch (error) {
+                alert(`Erro ao carregar gráficos: ${error.message}`);
+            }
+        }
+        // Baixar resultados
+        function downloadResults() {
+            const configName = document.getElementById('config-name').value;
+            const currency = document.getElementById('output-currency').value;
+            
+            window.open(`/download_result?config=${configName}&currency=${currency}`, '_blank');
+        }
+
+        // Limpar configuração
+        function clearConfig() {
+            if (!confirm('Tem certeza que deseja limpar toda a configuração?')) return;
+            
+            // Resetar parâmetros
+            document.getElementById('config-name').value = 'meu_portfolio';
+            document.getElementById('initial-capital').value = '100000';
+            document.getElementById('start-year-month').value = '2010-01';
+            document.getElementById('end-year-month').value = '';
+            document.getElementById('rebalance-freq').value = 'M';
+            document.getElementById('output-currency').value = 'BRL';
+
+
+            document.getElementById('show-graphs-btn').disabled = true;
+            document.getElementById('show-details-btn').disabled = true;            
+            
+            // Resetar ativos
+            for (const asset in assetsData) {
+                assetsData[asset].selected = false;
+                assetsData[asset].weight = '0';
+                assetsData[asset].factor = '1.0';
+            }
+            
+            // Atualizar tabela
+            renderAssetsTable();
+            
+            // Desabilitar botão de gráficos
+            document.getElementById('show-graphs-btn').disabled = true;
+        }
+
+        // Ajustar tamanho da fonte
+        function toggleFontSize(action) {
+            const root = document.documentElement;
+            const currentSize = parseFloat(getComputedStyle(root).fontSize);
+            
+            if (action === 'increase') {
+                fontSize = Math.min(20, fontSize + 1);
+            } else {
+                fontSize = Math.max(12, fontSize - 1);
+            }
+            
+            root.style.fontSize = `${fontSize}px`;
+        }
+
+        // Nova função para carregar a configuração padrão
+        async function loadDefaultConfig() {
+            try {
+                // Verificar se existe config.ini
+                const response = await fetch('/load_config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ config_name: 'config.ini' })
+                });
+                
+                const configData = await response.json();
+                
+                if (configData) {
+                    // Aplicar parâmetros
+                    document.getElementById('config-name').value = 'config';
+                    document.getElementById('initial-capital').value = configData.initial_capital;
+                    document.getElementById('start-year-month').value = configData.start_year_month;
+                    document.getElementById('end-year-month').value = configData.end_year_month || '';
+                    
+                    // Converter valor numérico para código de frequência
+                    const freqMap = {
+                        0: 'N', 1: 'M', 2: 'B', 3: 'Q', 
+                        4: 'D', 6: 'S', 12: 'A'
+                    };
+                    document.getElementById('rebalance-freq').value = freqMap[configData.rebalance_freq] || 'M';
+                    
+                    document.getElementById('output-currency').value = configData.output_currency;
+                    
+                    // Aplicar alocação
+                    for (const asset in assetsData) {
+                        assetsData[asset].selected = false;
+                        assetsData[asset].weight = '0';
+                        assetsData[asset].factor = '1.0';
+                    }
+                    
+                    for (const [asset, weight] of Object.entries(configData.allocation)) {
+                        if (assetsData[asset]) {
+                            assetsData[asset].selected = true;
+                            assetsData[asset].weight = (parseFloat(weight) * 100).toFixed(8);
+                        }
+                    }
+                    
+                    // Aplicar fatores de performance
+                    if ('performance_factors' in configData) {
+                        for (const [asset, factor] of Object.entries(configData.performance_factors)) {
+                            if (assetsData[asset]) {
+                                assetsData[asset].factor = factor;
+                            }
+                        }
+                    }
+                    
+                    // Atualizar tabela
+                    renderAssetsTable();
+                    
+                    // Atualizar seletor de configurações
+                    await loadConfigSelector('config.ini');
+                    
+                    showStatusAlert('Configuração padrão carregada!', 'success');
+                    return true;
+                }
+            } catch (error) {
+                console.error('Erro ao carregar configuração padrão:', error);
+            }
+            return false;
+        }    
+        
+        // Adicione esta função para mostrar o detalhamento
+        async function showDetails() {
+            const executionId = document.getElementById('show-details-btn').dataset.executionId;
+            if (!executionId) {
+                alert('Nenhuma simulação disponível. Execute uma simulação primeiro.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/get_results_details', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ execution_id: executionId })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Abrir modal com resultados detalhados
+                    document.getElementById('results-content').innerHTML = result.html_table;
+                    const modal = new bootstrap.Modal(document.getElementById('results-modal'));
+                    modal.show();
+                    
+                    // Inicializar DataTable
+                    setTimeout(() => {
+                        $('#datatable').DataTable({
+                            pageLength: 25,
+                            lengthMenu: [10, 15, 25, 50, 100],
+                            language: {
+                                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json'
+                            }
+                        });
+                    }, 300);
+                } else {
+                    alert(`Erro: ${result.error}`);
+                }
+            } catch (error) {
+                alert(`Erro ao obter detalhes: ${error.message}`);
+            }
+        }
+        function showStatusAlert(message, type = 'info', timeout = 4000) {
+            const container = document.getElementById('status-alert-container');
+            const alertId = 'alert-' + Date.now();
+            
+            const iconMap = {
+                success: 'bi-check-circle',
+                danger: 'bi-exclamation-triangle',
+                warning: 'bi-exclamation-circle',
+                info: 'bi-info-circle'
+            };
+
+            const icon = iconMap[type] || 'bi-info-circle';
+
+            const alertHTML = `
+                <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show shadow-sm d-flex align-items-center" role="alert">
+                    <i class="bi ${icon} me-2"></i>
+                    <div>${message}</div>
+                    <button type="button" class="btn-close ms-3" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+
+            container.insertAdjacentHTML('beforeend', alertHTML);
+
+            setTimeout(() => {
+                const alertElement = document.getElementById(alertId);
+                if (alertElement) {
+                    const bsAlert = bootstrap.Alert.getOrCreateInstance(alertElement);
+                    bsAlert.close();
+                }
+            }, timeout);
+        }        
+    </script>
+</body>
+</html>
