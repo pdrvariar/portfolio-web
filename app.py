@@ -16,6 +16,16 @@ results_storage = {}
 # Criar arquivos exemplo se necessário
 create_example_config()
 
+
+# Adicione esta função para limpar resultados antigos
+def clean_old_results():
+    current_time = time.time()
+    for exec_id in list(results_storage.keys()):
+        # Remover resultados com mais de 1 hora
+        if current_time - results_storage[exec_id]['timestamp'] > 3600:
+            del results_storage[exec_id]
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -51,6 +61,7 @@ def save_config():
 
 @app.route('/run_simulation', methods=['POST'])
 def run_simulation():
+    clean_old_results()  # Limpar resultados antigos
     config_name = request.json['config_name']
     execution_id = str(uuid.uuid4())  # ID único para esta execução
       
@@ -173,6 +184,8 @@ def download_result():
         os.path.join('spreadsheet', filename),
         as_attachment=True
     )
+
+
 
 @app.route('/get_results_details', methods=['POST'])
 def get_results_details():

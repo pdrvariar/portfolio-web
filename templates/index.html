@@ -583,24 +583,19 @@
         }
         let currentExecutionId = null; // variável global
 
+
+
         async function runSimulation() {
-            // Desabilitar ambos os botões no início
+            // Desabilitar botões no início
             document.getElementById('show-graphs-btn').disabled = true;
-            document.getElementById('show-details-btn').disabled = true;            
+            document.getElementById('show-details-btn').disabled = true;
+            
             const configName = document.getElementById('config-name').value;
-
-            // Desabilitar botão de gráficos
-            document.getElementById('show-graphs-btn').disabled = true;
-
-            // Mostrar barra de progresso
             document.getElementById('progress-container').classList.remove('d-none');
             showStatusAlert('Simulação em andamento...', 'info');
 
             try {
-                // Salvar configuração antes de simular
                 await saveConfig();
-
-                // Iniciar simulação
                 const response = await fetch('/run_simulation', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -608,14 +603,23 @@
                 });
 
                 const result = await response.json();
-
                 if (result.status === 'started') {
                     const executionId = result.execution_id;
-                    currentExecutionId = executionId;
-
-                    // Verificar resultados periodicamente
-                    const intervalId = setInterval(async () => {
+                    
+                    // Armazenar ID globalmente para acesso posterior
+                    window.currentExecutionId = executionId;
+                    
+                    // Verificar resultados com timeout
+                    const startTime = Date.now();
+                    const maxWaitTime = 600000; // 10 minutos
+                    
+                    const checkResults = async () => {
                         try {
+                            const elapsed = Date.now() - startTime;
+                            if (elapsed > maxWaitTime) {
+                                throw new Error('Tempo máximo de espera excedido');
+                            }
+
                             const tableResponse = await fetch('/get_results_table', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -623,61 +627,41 @@
                             });
 
                             const tableResult = await tableResponse.json();
-
+                            
                             if (tableResult.success) {
-                                clearInterval(intervalId);
-
-                                // Habilitar ambos os botões
-                                // Habilitar ambos os botões e armazenar ID
+                                // Habilitar botões quando pronto
                                 document.getElementById('show-graphs-btn').disabled = false;
                                 document.getElementById('show-details-btn').disabled = false;
+                                
+                                // Armazenar ID nos botões
                                 document.getElementById('show-graphs-btn').dataset.executionId = executionId;
-                                document.getElementById('show-details-btn').dataset.executionId = executionId; // Garant
-
-                                // Exibir resultados no modal
-                                document.getElementById('results-content').innerHTML = tableResult.html_table;
-                                const modal = new bootstrap.Modal(document.getElementById('results-modal'));
-                                modal.show();
-
-                                // Inicializar DataTable após renderização
-                                setTimeout(() => {
-                                    $('#datatable').DataTable({
-                                        pageLength: 25,
-                                        lengthMenu: [10, 15, 25, 50, 100],
-                                        language: {
-                                            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json'
-                                        }
-                                    });
-                                }, 300);
-
-                                // Habilitar botão de gráficos
-                                document.getElementById('show-graphs-btn').disabled = false;
-                                document.getElementById('show-graphs-btn').dataset.executionId = executionId;
-
-                                // Esconder progresso
+                                document.getElementById('show-details-btn').dataset.executionId = executionId;
+                                
                                 document.getElementById('progress-container').classList.add('d-none');
-                            } else if (tableResult.error && !tableResult.error.includes("andamento")) {
-                                clearInterval(intervalId);
-                                document.getElementById('simulation-results').innerHTML = `
-                                    <div class="alert alert-danger">
-                                        <i class="bi bi-exclamation-circle"></i> ${tableResult.error}
-                                    </div>
-                                `;
-                                document.getElementById('progress-container').classList.add('d-none');
+                                showStatusAlert('Simulação concluída!', 'success');
+                            } 
+                            else if (tableResult.error.includes("andamento")) {
+                                // Continuar verificando se ainda está em andamento
+                                setTimeout(checkResults, 5000); // Verificar a cada 5s
                             }
-                            // Se estiver em andamento, continua esperando...
+                            else {
+                                throw new Error(tableResult.error);
+                            }
                         } catch (error) {
-                            clearInterval(intervalId);
-                            showStatusAlert('Erro ao verificar resultados', 'danger');                            
                             document.getElementById('progress-container').classList.add('d-none');
+                            showStatusAlert(`Erro: ${error.message}`, 'danger');
                         }
-                    }, 2000);
+                    };
+                    
+                    // Iniciar primeira verificação
+                    setTimeout(checkResults, 5000);
                 }
             } catch (error) {
-                showStatusAlert('Erro: ' + error.message, 'danger');
                 document.getElementById('progress-container').classList.add('d-none');
+                showStatusAlert(`Erro: ${error.message}`, 'danger');
             }
         }
+        
         // Mostrar gráficos
         async function showGraphs() {
             // Recuperar execution_id do botão
